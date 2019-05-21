@@ -2,20 +2,18 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package handler
 
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"runtime"
 	"time"
-
+ 
 	"github.com/jpillora/present/present"
-	"golang.org/x/tools/godoc/static"
+	"github.com/jpillora/present/static"
 	"golang.org/x/tools/playground/socket"
 
 	// This will register handlers at /compile and /share that will proxy to the
@@ -31,38 +29,29 @@ var scripts = []string{"jquery.js", "jquery-ui.js", "playground.js", "play.js"}
 // playScript registers an HTTP handler at /play.js that serves all the
 // scripts specified by the variable above, and appends a line that
 // initializes the playground with the specified transport.
-func playScript(root, transport string) {
+func playScript(router *http.ServeMux, transport string) {
 	modTime := time.Now()
 	var buf bytes.Buffer
 	for _, p := range scripts {
-		if s, ok := static.Files[p]; ok {
-			buf.WriteString(s)
-			continue
-		}
-		b, err := ioutil.ReadFile(filepath.Join(root, "static", p))
-		if err != nil {
-			panic(err)
-		}
-		buf.Write(b)
+		buf.Write(static.MustRead(p))
 	}
 	fmt.Fprintf(&buf, "\ninitPlayground(new %v());\n", transport)
 	b := buf.Bytes()
-	http.HandleFunc("/play.js", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/play.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-type", "application/javascript")
 		http.ServeContent(w, r, "", modTime, bytes.NewReader(b))
 	})
 }
 
-func initPlayground(basepath string, origin *url.URL) {
+func initPlayground(router *http.ServeMux, usePlay, nacl bool, originHost string) {
 	if !present.PlayEnabled {
 		return
 	}
-	if *usePlayground {
-		playScript(basepath, "HTTPTransport")
+	if usePlay {
+		playScript(router, "HTTPTransport")
 		return
 	}
-
-	if *nativeClient {
+	if nacl {
 		// When specifying nativeClient, non-Go code cannot be executed
 		// because the NaCl setup doesn't support doing so.
 		socket.RunScripts = false
@@ -73,17 +62,18 @@ func initPlayground(basepath string, origin *url.URL) {
 			return environ("GOOS=nacl")
 		}
 	}
-	playScript(basepath, "SocketTransport")
-	http.Handle("/socket", socket.NewHandler(origin))
+	playScript(router, "SocketTransport")
+	origin := &url.URL{Scheme: "http", Host: originHost}
+	router.Handle("/socket", socket.NewHandler(origin))
 }
 
 func playable(c present.Code) bool {
 	play := present.PlayEnabled && c.Play
-
+	// TODO(jpillora): handler should be a struct, and all of these fuctions should be methods
 	// Restrict playable files to only Go source files when using play.golang.org,
 	// since there is no method to execute shell scripts there.
-	if *usePlayground {
-		return play && c.Ext == ".go"
-	}
+	// if *usePlayground {
+	// 	return play && c.Ext == ".go"
+	// }
 	return play
 }

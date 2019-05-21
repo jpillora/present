@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package handler
 
 import (
 	"html/template"
@@ -16,39 +16,38 @@ import (
 	"strings"
 
 	"github.com/jpillora/present/present"
+	"github.com/jpillora/present/static"
 )
 
-func init() {
-	http.HandleFunc("/", dirHandler)
-}
-
 // dirHandler serves a directory listing for the requested path, rooted at *contentPath.
-func dirHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/favicon.ico" {
-		http.NotFound(w, r)
-		return
-	}
-	name := filepath.Join(*contentPath, r.URL.Path)
-	if isDoc(name) {
-		err := renderDoc(w, name)
-		if err != nil {
-			log.Println(err)
+func dirHandler(contentPath string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/favicon.ico" {
+			http.NotFound(w, r)
+			return
+		}
+		name := filepath.Join(contentPath, r.URL.Path)
+		if isDoc(name) {
+			err := renderDoc(w, name)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		if isDir, err := dirList(contentPath, w, name); err != nil {
+			addr, _, e := net.SplitHostPort(r.RemoteAddr)
+			if e != nil {
+				addr = r.RemoteAddr
+			}
+			log.Printf("request from %s: %s", addr, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		} else if isDir {
+			return
 		}
-		return
-	}
-	if isDir, err := dirList(w, name); err != nil {
-		addr, _, e := net.SplitHostPort(r.RemoteAddr)
-		if e != nil {
-			addr = r.RemoteAddr
-		}
-		log.Printf("request from %s: %s", addr, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	} else if isDir {
-		return
-	}
-	http.FileServer(http.Dir(*contentPath)).ServeHTTP(w, r)
+		http.FileServer(http.Dir(contentPath)).ServeHTTP(w, r)
+	})
 }
 
 func isDoc(path string) bool {
@@ -65,9 +64,9 @@ var (
 	contentTemplate map[string]*template.Template
 )
 
-func initTemplates(base string) error {
+func initTemplates() error {
 	// Locate the template file.
-	actionTmpl := filepath.Join(base, "templates/action.tmpl")
+	actionTmpl := string(static.MustRead("templates/action.tmpl"))
 
 	contentTemplate = make(map[string]*template.Template)
 
@@ -75,19 +74,18 @@ func initTemplates(base string) error {
 		".slide":   "slides.tmpl",
 		".article": "article.tmpl",
 	} {
-		contentTmpl = filepath.Join(base, "templates", contentTmpl)
-		log.Printf(">>> %s", contentTmpl)
+		contentTmpl = string(static.MustRead(filepath.Join("templates", contentTmpl)))
 		// Read and parse the input.
 		tmpl := present.Template()
 		tmpl = tmpl.Funcs(template.FuncMap{"playable": playable})
-		if _, err := tmpl.ParseFiles(actionTmpl, contentTmpl); err != nil {
+		if _, err := tmpl.Parse(actionTmpl + contentTmpl); err != nil {
 			return err
 		}
 		contentTemplate[ext] = tmpl
 	}
 
 	var err error
-	dirListTemplate, err = template.ParseFiles(filepath.Join(base, "templates/dir.tmpl"))
+	dirListTemplate, err = template.New("dir").Parse(string(static.MustRead("templates/dir.tmpl")))
 	return err
 }
 
@@ -121,7 +119,7 @@ func parse(name string, mode present.ParseMode) (*present.Doc, error) {
 // presentation title in the listing.
 // If the given path is not a directory, it returns (isDir == false, err == nil)
 // and writes nothing to w.
-func dirList(w io.Writer, name string) (isDir bool, err error) {
+func dirList(contentPath string, w io.Writer, name string) (isDir bool, err error) {
 	f, err := os.Open(name)
 	if err != nil {
 		return false, err
@@ -138,7 +136,7 @@ func dirList(w io.Writer, name string) (isDir bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	strippedPath := strings.TrimPrefix(name, filepath.Clean(*contentPath))
+	strippedPath := strings.TrimPrefix(name, filepath.Clean(contentPath))
 	strippedPath = strings.TrimPrefix(strippedPath, "/")
 	d := &dirListData{Path: strippedPath}
 	for _, fi := range fis {
