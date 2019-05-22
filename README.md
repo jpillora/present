@@ -13,3 +13,7 @@
 $ go get -v github.com/jpillora/present
 $ present --help
 ```
+
+## Notes
+
+* Playground and NativeClient are unused, please send PRs :)
