@@ -12,8 +12,14 @@
     <script src='/static/slides.js'></script>
 
     <link href="/static/highlight.css" rel="stylesheet">
-    <script src='/static/highlight.js'></script>
-    <script>hljs.initHighlightingOnLoad();</script>
+    <script src="/static/highlight.js"></script>
+    <script>
+    document.addEventListener("DOMContentLoaded", (event) => {
+      document.querySelectorAll(".code pre").forEach((block) => {
+        hljs.highlightBlock(block);
+      });
+    });
+    </script>
 
     {{if .NotesEnabled}}
     <script>
