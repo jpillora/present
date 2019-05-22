@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jpillora/present/present"
 	"github.com/jpillora/present/static"
+	"golang.org/x/tools/present"
 )
 
 type Config struct {

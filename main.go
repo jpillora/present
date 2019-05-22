@@ -1,31 +1,32 @@
-// Copyright 2013 The Go Authors.  All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 package main
 
 import (
 	"fmt"
 	"log"
-	"os"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 
+	"github.com/jpillora/cookieauth"
 	"github.com/jpillora/opts"
 	"github.com/jpillora/present/handler"
-	"github.com/jpillora/present/present"
+	"github.com/jpillora/requestlog"
+	"golang.org/x/tools/present"
 )
 
 type command struct {
-	Host          string `opts:"help=HTTP listening interface"`
-	Port          int    `opts:"help=HTTP listening port,env"`
+	Host string `opts:"help=HTTP listening interface"`
+	Port int    `opts:"help=HTTP listening port, env"`
+	Log  bool   `opts:"help=enable request logging"`
+	Auth string `opts:"help=enable basic-auth (user:pass)"`
 	handler.Config
 }
 
 func main() {
 	c := command{
 		Host: "localhost",
-		Port: 3339,
+		Port: 3999,
 	}
 	//customise defualts in google app engine
 	if os.Getenv("GAE_ENV") == "standard" {
@@ -54,6 +55,13 @@ func main() {
 	log.Printf("Open your web browser and visit http://%s", httpAddr)
 	if present.NotesEnabled {
 		log.Println("Notes are enabled, press N from the browser to display them")
+	}
+	//middleware
+	if a := strings.Split(c.Auth, ":"); len(a) == 2 {
+		h = cookieauth.Wrap(h, a[0], a[1])
+	}
+	if c.Log {
+		h = requestlog.Wrap(h)
 	}
 	log.Fatal(http.Serve(ln, h))
 }

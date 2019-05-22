@@ -15,8 +15,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jpillora/present/present"
 	"github.com/jpillora/present/static"
+	"golang.org/x/tools/present"
 )
 
 // dirHandler serves a directory listing for the requested path, rooted at *contentPath.

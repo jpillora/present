@@ -12,8 +12,8 @@ import (
 	"runtime"
 	"time"
  
-	"github.com/jpillora/present/present"
 	"github.com/jpillora/present/static"
+	"golang.org/x/tools/present"
 	"golang.org/x/tools/playground/socket"
 
 	// This will register handlers at /compile and /share that will proxy to the
